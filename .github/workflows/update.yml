@@ -2,7 +2,7 @@ name: Update cameras
 
 on:
   schedule:
-    - cron: '23 7 * * *'        # zilnic, 07:23 UTC
+    - cron: '17 3 * * *'        # zilnic, 03:17 UTC (noaptea în Europa, Overpass mai liber)
   workflow_dispatch:
     inputs:
       force:
@@ -20,7 +20,7 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 180
     steps:
       - uses: actions/checkout@v5
 
