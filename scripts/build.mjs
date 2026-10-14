@@ -19,6 +19,7 @@ const Q_TIMEOUT = 90;                  // timeout declarat în query: mic = acce
 const Q_MAXSIZE = 128 * 1024 * 1024;   // memorie declarată: mică = acceptat mai ușor
 const MAX_DEPTH = 3;                   // o zonă care eșuează se împarte în 4, de maximum 3 ori
 const PAUSE_MS = 3000;                 // pauză între cereri reușite
+const MAX_LAG_H = +(process.env.MAX_LAG_H || 72); // server cu date mai vechi de atât = ignorat
 
 // Zone mici (9° lat x 6° lng): fiecare cerere termină repede, înainte ca serverul să dea 504.
 // [sud, vest, nord, est] — SUA continentală + sudul Canadei, apoi Alaska, Hawaii, Puerto Rico
@@ -42,13 +43,36 @@ function query(b) {
     `(node["surveillance:type"="ALPR"](${bb});node["highway"="speed_camera"](${bb}););out body qt;`;
 }
 
-// O încercare pe toate serverele, începând cu ultimul care a mers
+// Unele oglinzi Overpass nu se mai actualizează (date vechi de luni). Le detectăm după
+// osm3s.timestamp_osm_base și nu le mai folosim în rularea curentă.
+const staleServers = new Set();
+const seenBase = new Map();     // host -> timestamp_osm_base
+const served = {};              // host -> câte cereri a servit
+let oldestBase = null;
+
+function checkFresh(url, data) {
+  const base = data.osm3s && data.osm3s.timestamp_osm_base;
+  if (!base) return;
+  if (!seenBase.has(host(url))) {
+    seenBase.set(host(url), base);
+    console.log(`    ${host(url)}: date OSM din ${base}`);
+  }
+  const lagH = (Date.now() - Date.parse(base)) / 3.6e6;
+  if (lagH > MAX_LAG_H) {
+    staleServers.add(url);
+    throw new Error(`date vechi (${base}, cu ${Math.round(lagH / 24)} zile în urmă); nu mai folosesc serverul`);
+  }
+  if (!oldestBase || Date.parse(base) < Date.parse(oldestBase)) oldestBase = base;
+}
+
+// O încercare pe toate serverele actualizate, începând cu ultimul care a mers
 let epStart = 0;
 async function tryAllEndpoints(q, label) {
   let lastErr = null;
   for (let k = 0; k < ENDPOINTS.length; k++) {
     const idx = (epStart + k) % ENDPOINTS.length;
     const url = ENDPOINTS[idx];
+    if (staleServers.has(url)) continue;
     const t0 = Date.now();
     try {
       const r = await fetch(url, {
@@ -64,6 +88,8 @@ async function tryAllEndpoints(q, label) {
       const data = await r.json();
       if (data.remark && /error|timed out|out of memory/i.test(data.remark)) throw new Error(data.remark);
       if (!Array.isArray(data.elements)) throw new Error('răspuns fără elements');
+      checkFresh(url, data);
+      served[host(url)] = (served[host(url)] || 0) + 1;
       epStart = idx;
       return data;
     } catch (e) {
@@ -71,7 +97,7 @@ async function tryAllEndpoints(q, label) {
       console.warn(`    ${label}: ${host(url)} a eșuat după ${((Date.now() - t0) / 1000).toFixed(0)} s (${e.message})`);
     }
   }
-  throw lastErr || new Error('niciun server');
+  throw lastErr || new Error('niciun server actualizat disponibil');
 }
 
 // Descarcă o zonă; dacă nu merge, o împarte în 4 și încearcă bucățile
@@ -105,7 +131,6 @@ const num = (x) => String(+x.toFixed(5));
 
 async function main() {
   const nodes = new Map();
-  let osmBase = '';
   const boxes = makeBoxes();
   const tStart = Date.now();
   for (let i = 0; i < boxes.length; i++) {
@@ -113,11 +138,12 @@ async function main() {
     const parts = await fetchBox(boxes[i], 0, label);
     for (const data of parts) {
       for (const el of data.elements) if (el.type === 'node' && Number.isFinite(el.lat)) nodes.set(el.id, el);
-      if (data.osm3s && data.osm3s.timestamp_osm_base) osmBase = data.osm3s.timestamp_osm_base;
     }
     if (i < boxes.length - 1) await sleep(PAUSE_MS);
   }
   console.log(`Descărcare terminată în ${((Date.now() - tStart) / 60000).toFixed(1)} min`);
+  console.log(`Cereri servite: ${JSON.stringify(served)}${staleServers.size ? `; ignorate (date vechi): ${[...staleServers].map(host).join(', ')}` : ''}`);
+  console.log(`Cele mai vechi date folosite: ${oldestBase}`);
 
   let alpr = 0, speed = 0;
   const rows = ['#camroute v1\tid\tlat\tlng\tk\tdir\tmfr\top'];
@@ -156,7 +182,7 @@ async function main() {
   const meta = {
     version: 1,
     updated: new Date().toISOString(),
-    osm_base: osmBase,
+    osm_base: oldestBase,
     count, alpr, speed,
     file: 'cameras.tsv.gz',
     bytes: gz.length,
