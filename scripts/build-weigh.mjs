@@ -41,9 +41,10 @@ const host = (u) => new URL(u).host;
 // weigh stations in OSM: highway=weigh_station (nod sau way), amenity=weighbridge
 function query(b) {
   const bb = b.map((v) => +v.toFixed(4)).join(',');
+  // DOAR stații de inspecție de stat (highway=weigh_station). NU weighbridge — acela prinde
+  // CAT Scale din benzinării și cântare de fermă, care nu sunt stații de inspecție pentru camioane.
   return `[out:json][timeout:${Q_TIMEOUT}][maxsize:${Q_MAXSIZE}];` +
-    `(node["highway"="weigh_station"](${bb});way["highway"="weigh_station"](${bb});` +
-    `node["amenity"="weighbridge"](${bb});way["amenity"="weighbridge"](${bb}););out center tags qt;`;
+    `(node["highway"="weigh_station"](${bb});way["highway"="weigh_station"](${bb}););out center tags qt;`;
 }
 
 const staleServers = new Set();
@@ -131,8 +132,13 @@ async function main() {
         const lat = el.lat != null ? el.lat : (el.center && el.center.lat);
         const lon = el.lon != null ? el.lon : (el.center && el.center.lon);
         if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
+        const t = el.tags || {};
+        // excludem cântarele comerciale strecurate (CAT Scale etc.) chiar dacă au highway=weigh_station
+        const nm = String(t.name || t.brand || t.operator || '').toLowerCase();
+        if (/cat scale|catscale|truck scale|co-?op|cooperative|grain|recycl|landfill|quarry|scrap/.test(nm)) continue;
+        if (t.brand === 'CAT Scale' || t.operator === 'CAT Scale') continue;
         const key = el.type[0] + el.id;   // n123 / w456
-        items.set(key, { lat, lon, tags: el.tags || {} });
+        items.set(key, { lat, lon, tags: t });
       }
     }
     if (i < boxes.length - 1) await sleep(PAUSE_MS);
