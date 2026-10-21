@@ -41,10 +41,10 @@ const host = (u) => new URL(u).host;
 // weigh stations in OSM: highway=weigh_station (nod sau way), amenity=weighbridge
 function query(b) {
   const bb = b.map((v) => +v.toFixed(4)).join(',');
-  // DOAR stații de inspecție de stat (highway=weigh_station). NU weighbridge — acela prinde
-  // CAT Scale din benzinării și cântare de fermă, care nu sunt stații de inspecție pentru camioane.
+  // În OSM, cântarele sunt sub amenity=weighbridge (highway=weigh_station nu există ca tag real).
+  // Luăm tot și FILTRĂM mai jos: păstrăm stațiile de inspecție de stat, scoatem CAT Scale / gunoaie / comerciale.
   return `[out:json][timeout:${Q_TIMEOUT}][maxsize:${Q_MAXSIZE}];` +
-    `(node["highway"="weigh_station"](${bb});way["highway"="weigh_station"](${bb}););out center tags qt;`;
+    `(node["amenity"="weighbridge"](${bb});way["amenity"="weighbridge"](${bb}););out center tags qt;`;
 }
 
 const staleServers = new Set();
@@ -133,10 +133,19 @@ async function main() {
         const lon = el.lon != null ? el.lon : (el.center && el.center.lon);
         if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
         const t = el.tags || {};
-        // excludem cântarele comerciale strecurate (CAT Scale etc.) chiar dacă au highway=weigh_station
-        const nm = String(t.name || t.brand || t.operator || '').toLowerCase();
-        if (/cat scale|catscale|truck scale|co-?op|cooperative|grain|recycl|landfill|quarry|scrap/.test(nm)) continue;
-        if (t.brand === 'CAT Scale' || t.operator === 'CAT Scale') continue;
+        // Păstrăm doar stațiile de INSPECȚIE (DOT/poliție). Scoatem cântarele comerciale și de gunoi.
+        const nm = String(t.name || '').toLowerCase();
+        const br = String(t.brand || '').toLowerCase();
+        const op = String(t.operator || '').toLowerCase();
+        const all = nm + ' ' + br + ' ' + op;
+        // comerciale / neinspectie — scoatem
+        if (/cat ?scale|quiktrip|pilot|loves|love's|flying ?j|ta travel|petro|truck ?stop/.test(all)) continue;         // benzinării
+        if (/recycl|landfill|waste|garbage|refuse|disposal|gfl|environmental|scrap|salvage/.test(all)) continue;         // gunoi
+        if (/quarry|aggregate|materials|concrete|cement|asphalt|gravel|sand|cadman|icon materials/.test(all)) continue;  // construcții
+        if (/grain|co-?op|cooperative|elevator|farm|feed|agri/.test(all)) continue;                                      // agricultură
+        if (/public ?scale|rawlins public/.test(all)) continue;                                                          // cântare publice comerciale
+        // tag-uri OSM care arată comercial
+        if (t.fee === 'yes' && !/dot|highway|patrol|inspection|transport|department|dmv|state/i.test(all)) continue;
         const key = el.type[0] + el.id;   // n123 / w456
         items.set(key, { lat, lon, tags: t });
       }
