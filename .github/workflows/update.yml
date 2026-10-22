@@ -2,7 +2,7 @@ name: Update cameras
 
 on:
   schedule:
-    - cron: '17 3 * * *'        # zilnic, 03:17 UTC (noaptea în Europa, Overpass mai liber)
+    - cron: '17 3 * * *'
   workflow_dispatch:
     inputs:
       force:
@@ -24,7 +24,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Construiește baza de camere
+      - name: Construieste baza de camere
         env:
           PREV_META_URL: https://raw.githubusercontent.com/${{ github.repository }}/data/meta.json
           FORCE: ${{ inputs.force && '1' || '0' }}
@@ -32,14 +32,18 @@ jobs:
           node --version
           node scripts/build.mjs out
 
-      - name: Publică pe ramura data
+      - name: Publica pe ramura data (pastrand fisierele existente, ex. cantare)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          cd out
-          git init -q -b data
+          # luam ramura data existenta (cu cantarele) si adaugam doar fisierele de camere
+          git clone -q --depth 1 -b data "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" data-branch || {
+            echo "ramura data nu exista inca — o creez de la zero"; mkdir -p data-branch; cd data-branch; git init -q -b data; cd ..;
+          }
+          cp out/* data-branch/
+          cd data-branch
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
-          git commit -q -m "Camere $(date -u +%Y-%m-%dT%H:%MZ)"
+          git commit -q -m "Cameras $(date -u +%Y-%m-%dT%H:%MZ)" || { echo "nimic de comis"; exit 0; }
           git push -q -f "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" data
