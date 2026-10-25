@@ -1,6 +1,6 @@
 # Date camere (generat automat)
 
-Actualizat: 2026-10-24T08:45:27.809Z — 147326 camere (ALPR 145474, viteză 1852).
+Actualizat: 2026-10-25T09:28:04.888Z — 147374 camere (ALPR 145522, viteză 1852).
 
 Format `cameras.tsv.gz` (gzip, TSV): `id, lat, lng, k (a = ALPR, s = viteză), direcție, producător, operator`.
 
