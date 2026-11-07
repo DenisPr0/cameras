@@ -1,11 +1,11 @@
 {
   "version": 1,
-  "updated": "2026-11-06T11:56:56.242Z",
-  "osm_base": "2026-11-06T11:00:49Z",
-  "count": 148694,
-  "alpr": 146798,
+  "updated": "2026-11-07T10:52:33.892Z",
+  "osm_base": "2026-11-07T10:21:21Z",
+  "count": 148812,
+  "alpr": 146916,
   "speed": 1896,
   "file": "cameras.tsv.gz",
-  "bytes": 2198330,
+  "bytes": 2199954,
   "license": "ODbL 1.0 — © OpenStreetMap contributors"
 }
