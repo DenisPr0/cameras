@@ -1,9 +1,9 @@
 {
   "version": 1,
-  "updated": "2026-11-02T13:11:54.843Z",
-  "osm_base": "2026-11-02T12:56:59Z",
-  "count": 1936,
+  "updated": "2026-11-09T13:55:32.611Z",
+  "osm_base": "2026-11-09T13:22:02Z",
+  "count": 1938,
   "file": "weigh-stations.tsv.gz",
-  "bytes": 28117,
+  "bytes": 28141,
   "license": "ODbL 1.0 — © OpenStreetMap contributors"
 }
